@@ -1,68 +1,63 @@
 <?php
 
+namespace Xoops\Protector;
+
+use Database;
+
 class Protector {
 
-var $mydirname ;
-
-var $_conn = null ;
-var $_conf = array() ;
-var $_conf_serialized = '' ;
-
-var $_bad_globals = array() ;
-
-var $message = '' ;
-var $warning = false ;
-var $error = false ;
-var $_doubtful_requests = array() ;
-var $_bigumbrella_doubtfuls = array() ;
-
-var $_dblayertrap_doubtfuls = array() ;
-var $_dblayertrap_doubtful_needles = array(
-	'information_schema' ,
-	'select' ,
-	"'" ,
-	'"' ,
-) ;
-
-var $_logged = false ;
-
-var $_done_badext = false ;
-var $_done_intval = false ;
-var $_done_dotdot = false ;
-var $_done_nullbyte = false ;
-var $_done_contami = false ;
-var $_done_isocom = false ;
-var $_done_union = false ;
-var $_done_dos = false ;
-
-var $_safe_badext = true ;
-var $_safe_contami = true ;
-var $_safe_isocom = true ;
-var $_safe_union = true ;
-
-var $_spamcount_uri = 0 ;
-
-var $_should_be_banned_time0 = false ;
-var $_should_be_banned = false ;
-
-var $_dos_stage = null ;
-
-var $ip_matched_info = null ;
-
-var $last_error_type = 'UNKNOWN' ;
+    public string $mydirname;
+    protected ?object $_conn = null;
+    protected array $_conf = [];
+    protected string $_conf_serialized = '';
+    protected array $_bad_globals = [];
+    public string $message = '';
+    public bool $warning = false;
+    public bool $error = false;
+    protected array $_doubtful_requests = [];
+    protected array $_bigumbrella_doubtfuls = [];
+    protected array $_dblayertrap_doubtfuls = [];
+    protected array $_dblayertrap_doubtful_needles = [
+        'information_schema',
+        'select',
+        "'",
+        '"',
+    ];
+    protected bool $_logged = false;
+    protected bool $_done_badext = false;
+    protected bool $_done_intval = false;
+    protected bool $_done_dotdot = false;
+    protected bool $_done_nullbyte = false;
+    protected bool $_done_contami = false;
+    protected bool $_done_isocom = false;
+    protected bool $_done_union = false;
+    protected bool $_done_dos = false;
+    public bool $_safe_badext = true;
+    public bool $_safe_contami = true;
+    public bool $_safe_isocom = true;
+    public bool $_safe_union = true;
+    protected int $_spamcount_uri = 0;
+    protected bool $_should_be_banned_time0 = false;
+    protected bool $_should_be_banned = false;
+    protected ?int $_dos_stage = null;
+    public ?string $ip_matched_info = null;
+    public string $last_error_type = 'UNKNOWN';
 
 
-// Constructor
-function Protector()
+public function __construct($options = [])
 {
-	$this->mydirname = 'protector' ;
+    $this->mydirname = 'protector';
 
-	// Preferences from configs/cache
-	$this->_conf_serialized = @file_get_contents( $this->get_filepath4confighcache() ) ;
-	$this->_conf = @unserialize( $this->_conf_serialized ) ;
-	if( empty( $this->_conf ) ) $this->_conf = array() ;
+    // Preferences from configs/cache
+    $this->_conf_serialized = @file_get_contents($this->get_filepath4confighcache());
+    $this->_conf = @unserialize($this->_conf_serialized);
+    if (empty($this->_conf)) {
+        $this->_conf = [];
+    }
 
-	if( ! empty( $this->_conf['global_disabled'] ) ) return true ;
+    if (!empty($this->_conf['global_disabled'])) {
+        return;
+    }
 
 	// die if PHP_SELF XSS found (disabled in 2.53)
 //	if( preg_match( '/[<>\'";\n ]/' , @$_SERVER['PHP_SELF'] ) ) {
@@ -75,11 +70,15 @@ function Protector()
 //	$_SERVER['PHP_SELF'] = strtr( @$_SERVER['PHP_SELF'] , array( '<' => '%3C' , '>' => '%3E' , "'" => '%27' , '"' => '%22' ) ) ;
 //	if( ! empty( $_SERVER['PATH_INFO'] ) ) $_SERVER['PATH_INFO'] = strtr( @$_SERVER['PATH_INFO'] , array( '<' => '%3C' , '>' => '%3E' , "'" => '%27' , '"' => '%22' ) ) ;
 
-	$this->_bad_globals = array( 'GLOBALS' , '_SESSION' , 'HTTP_SESSION_VARS' , '_GET' , 'HTTP_GET_VARS' , '_POST' , 'HTTP_POST_VARS' , '_COOKIE' , 'HTTP_COOKIE_VARS' , '_SERVER' , 'HTTP_SERVER_VARS' , '_REQUEST' , '_ENV' , '_FILES' , 'xoopsDB' , 'xoopsUser' , 'xoopsUserId' , 'xoopsUserGroups' , 'xoopsUserIsAdmin' , 'xoopsConfig' , 'xoopsOption' , 'xoopsModule' , 'xoopsModuleConfig' ) ;
+    $this->_bad_globals = ['GLOBALS', '_SESSION', 'HTTP_SESSION_VARS', '_GET', 'HTTP_GET_VARS', '_POST', 'HTTP_POST_VARS', '_COOKIE', 'HTTP_COOKIE_VARS', '_SERVER', 'HTTP_SERVER_VARS', '_REQUEST', '_ENV', '_FILES', 'xoopsDB', 'xoopsUser', 'xoopsUserId', 'xoopsUserGroups', 'xoopsUserIsAdmin', 'xoopsConfig', 'xoopsOption', 'xoopsModule', 'xoopsModuleConfig'];
 
-	$this->_initial_recursive( $_GET , 'G' ) ;
-	$this->_initial_recursive( $_POST , 'P' ) ;
-	$this->_initial_recursive( $_COOKIE , 'C' ) ;
+    $get = $options['get'] ?? $_GET;
+    $post = $options['post'] ?? $_POST;
+    $cookie = $options['cookie'] ?? $_COOKIE;
+
+    $this->_initial_recursive($get, 'G');
+    $this->_initial_recursive($post, 'P');
+    $this->_initial_recursive($cookie, 'C');
 }
 
 
@@ -113,14 +112,18 @@ function _initial_recursive( $val , $key )
 }
 
 
-static function &getInstance()
-{
-	static $instance ;
-	if( ! isset( $instance ) ) {
-		$instance = new Protector() ;
-	}
-	return $instance ;
-}
+    public static function &getInstance()
+    {
+        static $instance;
+        if (!isset($instance)) {
+            $instance = new self([
+                'get' => $_GET,
+                'post' => $_POST,
+                'cookie' => $_COOKIE,
+            ]);
+        }
+        return $instance;
+    }
 
 
 function updateConfIntoDb( $name , $value )
@@ -141,23 +144,17 @@ function updateConfFromDb()
 
 	$query = "SELECT `conf_name`,`conf_value` FROM `".XOOPS_DB_PREFIX."_config` WHERE `conf_title` like '".$constpref."%'";
 	$db_conf = array() ;
-	if( is_object($this->_conn) && get_class($this->_conn) === 'mysqli' ) {
-		$result = @mysqli_query( $this->_conn , $query ) ;
-		if( ! $result || mysqli_num_rows( $result ) < 5 ) {
-			return false ;
-		}
-		while( list( $key , $val ) = mysqli_fetch_row( $result ) ) {
-			$db_conf[ $key ] = $val ;
-		}
-	} else {
-		$result = @mysql_query( $query , $this->_conn ) ;
-		if( ! $result || mysql_num_rows( $result ) < 5 ) {
-			return false ;
-		}
-		while( list( $key , $val ) = mysql_fetch_row( $result ) ) {
-			$db_conf[ $key ] = $val ;
-		}
-	}
+        if (!($this->_conn instanceof \mysqli)) {
+            return false;
+        }
+
+        $result = @$this->_conn->query($query);
+        if (!$result || $result->num_rows < 5) {
+            return false;
+        }
+        while (list($key, $val) = $result->fetch_row()) {
+            $db_conf[$key] = $val;
+        }
 	$db_conf_serialized = serialize( $db_conf ) ;
 
 	// update config cache
@@ -223,25 +220,30 @@ function output_log( $type = 'UNKNOWN' , $uid = 0 , $unique_check = false , $lev
 
 	if( ! ( $this->_conf['log_level'] & $level ) ) return true ;
 
-	if( !is_object($this->_conn) || get_class($this->_conn) !== 'mysqli' ) {
-		$this->_conn = @mysqli_connect( XOOPS_DB_HOST , XOOPS_DB_USER , XOOPS_DB_PASS ) ;
-		if( ! $this->_conn ) die( 'db connection failed.' ) ;
-		if( ! mysqli_select_db(  $this->_conn , XOOPS_DB_NAME ) ) die( 'db selection failed.' ) ;
-	}
+        if (!($this->_conn instanceof \mysqli)) {
+            $this->_conn = @new \mysqli(XOOPS_DB_HOST, XOOPS_DB_USER, XOOPS_DB_PASS, XOOPS_DB_NAME);
+            if ($this->_conn->connect_error) {
+                die('db connection failed.');
+            }
+        }
 
-	$ip = @$_SERVER['REMOTE_ADDR'] ;
-	$agent = @$_SERVER['HTTP_USER_AGENT'] ;
+        $ip = @$_SERVER['REMOTE_ADDR'];
+        $agent = @$_SERVER['HTTP_USER_AGENT'];
 
-	if( $unique_check ) {
-		$result = mysqli_query( $this->_conn, 'SELECT ip,type FROM '.XOOPS_DB_PREFIX.'_'.$this->mydirname.'_log ORDER BY timestamp DESC LIMIT 1' ) ;
-		list( $last_ip , $last_type ) = mysqli_fetch_row( $result ) ;
-		if( $last_ip == $ip && $last_type == $type ) {
-			$this->_logged = true ;
-			return true ;
-		}
-	}
+        if ($unique_check) {
+            $result = $this->_conn->query('SELECT ip,type FROM ' . XOOPS_DB_PREFIX . '_' . $this->mydirname . '_log ORDER BY timestamp DESC LIMIT 1');
+            if ($result) {
+                list($last_ip, $last_type) = $result->fetch_row();
+                if ($last_ip == $ip && $last_type == $type) {
+                    $this->_logged = true;
+                    return true;
+                }
+            }
+        }
 
-	mysqli_query( $this->_conn , "INSERT INTO ".XOOPS_DB_PREFIX."_".$this->mydirname."_log SET ip='".addslashes($ip)."',agent='".addslashes($agent)."',type='".addslashes($type)."',description='".addslashes($this->message)."',uid='".intval($uid)."',timestamp=NOW()" ) ;
+        $stmt = $this->_conn->prepare("INSERT INTO " . XOOPS_DB_PREFIX . "_" . $this->mydirname . "_log SET ip=?, agent=?, type=?, description=?, uid=?, timestamp=NOW()");
+        $stmt->bind_param('ssssi', $ip, $agent, $type, $this->message, $uid);
+        $stmt->execute();
 	$this->_logged = true ;
 	return true ;
 }
@@ -264,13 +266,13 @@ function write_file_bwlimit( $expire )
 }
 
 
-function get_bwlimit()
-{
-	list( $expire ) = @file( Protector::get_filepath4bwlimit() ) ;
-	$expire = min( intval( $expire ) , time() + 300 ) ;
+    public function get_bwlimit()
+    {
+        list($expire) = @file(self::get_filepath4bwlimit());
+        $expire = min(intval($expire), time() + 300);
 
-	return $expire ;
-}
+        return $expire;
+    }
 
 
 function get_filepath4bwlimit()
@@ -308,11 +310,13 @@ function register_bad_ips( $jailed_time = 0 , $ip = null )
 }
 
 
-function get_bad_ips( $with_jailed_time = false )
-{
-	list( $bad_ips_serialized ) = @file( Protector::get_filepath4badips() ) ;
-	$bad_ips = empty( $bad_ips_serialized ) ? array() : @unserialize( $bad_ips_serialized ) ;
-	if( ! is_array( $bad_ips ) || isset( $bad_ips[0] ) ) $bad_ips = array() ;
+    public function get_bad_ips($with_jailed_time = false)
+    {
+        list($bad_ips_serialized) = @file(self::get_filepath4badips());
+        $bad_ips = empty($bad_ips_serialized) ? [] : @unserialize($bad_ips_serialized);
+        if (!is_array($bad_ips) || isset($bad_ips[0])) {
+            $bad_ips = [];
+        }
 
 	// expire jailed_time
 	$pos = 0 ;
@@ -336,11 +340,13 @@ function get_filepath4badips()
 }
 
 
-function get_group1_ips( $with_info = false )
-{
-	list( $group1_ips_serialized ) = @file( Protector::get_filepath4group1ips() ) ;
-	$group1_ips = empty( $group1_ips_serialized ) ? array() : @unserialize( $group1_ips_serialized ) ;
-	if( ! is_array( $group1_ips ) ) $group1_ips = array() ;
+    public function get_group1_ips($with_info = false)
+    {
+        list($group1_ips_serialized) = @file(self::get_filepath4group1ips());
+        $group1_ips = empty($group1_ips_serialized) ? [] : @unserialize($group1_ips_serialized);
+        if (!is_array($group1_ips)) {
+            $group1_ips = [];
+        }
 
 	if( $with_info ) {
 		$group1_ips = array_flip( $group1_ips ) ;
